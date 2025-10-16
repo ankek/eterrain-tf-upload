@@ -12,6 +12,7 @@ import (
 	"github.com/eterrain/tf-backend-service/internal/auth"
 	"github.com/eterrain/tf-backend-service/internal/config"
 	"github.com/eterrain/tf-backend-service/internal/handlers"
+	custommw "github.com/eterrain/tf-backend-service/internal/middleware"
 	"github.com/eterrain/tf-backend-service/internal/storage"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -54,6 +55,18 @@ func main() {
 	}
 	log.Println("Authentication credentials loaded from ./auth.cfg")
 
+	// Ensure file watcher is closed on shutdown
+	defer func() {
+		if err := credStore.Close(); err != nil {
+			log.Printf("Error closing credential store: %v", err)
+		}
+	}()
+
+	// Initialize per-organization rate limiter (60 requests per minute per org)
+	orgRateLimiter := custommw.NewPerOrgRateLimiter(60)
+	defer orgRateLimiter.Stop()
+	log.Println("Per-organization rate limiter initialized (60 req/min per org)")
+
 	// Initialize handlers
 	var stateHandler *handlers.StateHandler
 	var uploadHandler *handlers.UploadHandler
@@ -76,6 +89,18 @@ func main() {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
 
+	// Security: Limit request body size to prevent DoS attacks
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Set maximum request body size to 10MB
+			r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
+			next.ServeHTTP(w, r)
+		})
+	})
+
+	// Security: Limit concurrent requests to prevent resource exhaustion
+	r.Use(middleware.Throttle(100))
+
 	// Health check endpoint (no auth required)
 	r.Get("/health", healthHandler.Check)
 
@@ -83,6 +108,9 @@ func main() {
 	r.Route("/api/v1", func(r chi.Router) {
 		// Apply authentication middleware
 		r.Use(auth.Middleware(credStore))
+
+		// Apply per-organization rate limiting (after auth so we have org ID)
+		r.Use(custommw.RateLimitMiddleware(orgRateLimiter))
 
 		// Data upload endpoints (for Terraform provider)
 		if uploadHandler != nil {

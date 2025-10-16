@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 
 	"github.com/eterrain/tf-backend-service/internal/auth"
 	"github.com/eterrain/tf-backend-service/internal/storage"
+	"github.com/eterrain/tf-backend-service/internal/validation"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -33,8 +35,9 @@ func (h *StateHandler) GetState(w http.ResponseWriter, r *http.Request) {
 	}
 
 	stateName := chi.URLParam(r, "name")
-	if stateName == "" {
-		http.Error(w, "State name is required", http.StatusBadRequest)
+	if err := validation.ValidateStateName(stateName); err != nil {
+		http.Error(w, "Invalid state name", http.StatusBadRequest)
+		log.Printf("SECURITY: Invalid state name from org %s: %v", orgID, err)
 		return
 	}
 
@@ -62,8 +65,9 @@ func (h *StateHandler) PutState(w http.ResponseWriter, r *http.Request) {
 	}
 
 	stateName := chi.URLParam(r, "name")
-	if stateName == "" {
-		http.Error(w, "State name is required", http.StatusBadRequest)
+	if err := validation.ValidateStateName(stateName); err != nil {
+		http.Error(w, "Invalid state name", http.StatusBadRequest)
+		log.Printf("SECURITY: Invalid state name from org %s: %v", orgID, err)
 		return
 	}
 
@@ -99,8 +103,9 @@ func (h *StateHandler) DeleteState(w http.ResponseWriter, r *http.Request) {
 	}
 
 	stateName := chi.URLParam(r, "name")
-	if stateName == "" {
-		http.Error(w, "State name is required", http.StatusBadRequest)
+	if err := validation.ValidateStateName(stateName); err != nil {
+		http.Error(w, "Invalid state name", http.StatusBadRequest)
+		log.Printf("SECURITY: Invalid state name from org %s: %v", orgID, err)
 		return
 	}
 
@@ -130,8 +135,9 @@ func (h *StateHandler) LockState(w http.ResponseWriter, r *http.Request) {
 	}
 
 	stateName := chi.URLParam(r, "name")
-	if stateName == "" {
-		http.Error(w, "State name is required", http.StatusBadRequest)
+	if err := validation.ValidateStateName(stateName); err != nil {
+		http.Error(w, "Invalid state name", http.StatusBadRequest)
+		log.Printf("SECURITY: Invalid state name from org %s: %v", orgID, err)
 		return
 	}
 
@@ -174,8 +180,9 @@ func (h *StateHandler) UnlockState(w http.ResponseWriter, r *http.Request) {
 	}
 
 	stateName := chi.URLParam(r, "name")
-	if stateName == "" {
-		http.Error(w, "State name is required", http.StatusBadRequest)
+	if err := validation.ValidateStateName(stateName); err != nil {
+		http.Error(w, "Invalid state name", http.StatusBadRequest)
+		log.Printf("SECURITY: Invalid state name from org %s: %v", orgID, err)
 		return
 	}
 

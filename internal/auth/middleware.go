@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"strings"
 
@@ -32,6 +33,8 @@ func Middleware(store CredentialStore) func(http.Handler) http.Handler {
 			// Extract orgid from header
 			orgIDStr := r.Header.Get("X-Org-ID")
 			if orgIDStr == "" {
+				log.Printf("SECURITY: Missing X-Org-ID header - IP: %s, Path: %s, UserAgent: %s",
+					r.RemoteAddr, r.URL.Path, r.UserAgent())
 				http.Error(w, "Missing X-Org-ID header", http.StatusUnauthorized)
 				return
 			}
@@ -39,6 +42,8 @@ func Middleware(store CredentialStore) func(http.Handler) http.Handler {
 			// Parse orgid as UUID
 			orgID, err := uuid.Parse(orgIDStr)
 			if err != nil {
+				log.Printf("SECURITY: Invalid X-Org-ID format '%s' - IP: %s, Path: %s",
+					orgIDStr, r.RemoteAddr, r.URL.Path)
 				http.Error(w, "Invalid X-Org-ID format: must be a valid UUID", http.StatusUnauthorized)
 				return
 			}
@@ -46,6 +51,8 @@ func Middleware(store CredentialStore) func(http.Handler) http.Handler {
 			// Extract apikey from header
 			apiKey := r.Header.Get("X-API-Key")
 			if apiKey == "" {
+				log.Printf("SECURITY: Missing X-API-Key header - OrgID: %s, IP: %s, Path: %s",
+					orgID, r.RemoteAddr, r.URL.Path)
 				http.Error(w, "Missing X-API-Key header", http.StatusUnauthorized)
 				return
 			}
@@ -53,14 +60,27 @@ func Middleware(store CredentialStore) func(http.Handler) http.Handler {
 			// Validate credentials
 			valid, err := store.ValidateCredentials(orgID, apiKey)
 			if err != nil {
+				log.Printf("SECURITY: Credential validation error - OrgID: %s, IP: %s, Error: %v",
+					orgID, r.RemoteAddr, err)
 				http.Error(w, "Internal server error", http.StatusInternalServerError)
 				return
 			}
 
 			if !valid {
+				// Log failed authentication with API key prefix for auditing
+				apiKeyPrefix := "unknown"
+				if len(apiKey) > 8 {
+					apiKeyPrefix = apiKey[:8] + "..."
+				}
+				log.Printf("SECURITY: Failed authentication - OrgID: %s, APIKeyPrefix: %s, IP: %s, Path: %s, UserAgent: %s",
+					orgID, apiKeyPrefix, r.RemoteAddr, r.URL.Path, r.UserAgent())
 				http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 				return
 			}
+
+			// Log successful authentication
+			log.Printf("SECURITY: Successful authentication - OrgID: %s, IP: %s, Method: %s, Path: %s",
+				orgID, r.RemoteAddr, r.Method, r.URL.Path)
 
 			// Store orgID in context for use by handlers
 			ctx := context.WithValue(r.Context(), OrgIDContextKey, orgID)

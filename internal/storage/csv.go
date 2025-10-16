@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -32,9 +33,46 @@ func NewCSVStorage(dataDir string) (*CSVStorage, error) {
 		return nil, fmt.Errorf("failed to create data directory: %w", err)
 	}
 
+	// Get absolute path for security validation
+	absDataDir, err := filepath.Abs(dataDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get absolute path for data directory: %w", err)
+	}
+
 	return &CSVStorage{
-		dataDir: dataDir,
+		dataDir: absDataDir,
 	}, nil
+}
+
+// sanitizeFilePath validates and returns a safe file path for the given org ID
+// This provides defense-in-depth against path traversal attacks
+func (s *CSVStorage) sanitizeFilePath(orgID uuid.UUID) (string, error) {
+	// Validate UUID string format (should be safe, but defense-in-depth)
+	orgIDStr := orgID.String()
+
+	// Check for path traversal characters
+	if strings.ContainsAny(orgIDStr, "/\\..") {
+		return "", fmt.Errorf("invalid org ID: contains path traversal characters")
+	}
+
+	// Build the filename
+	filename := orgIDStr + ".csv"
+
+	// Join with data directory
+	filePath := filepath.Join(s.dataDir, filename)
+
+	// Ensure the resulting path is within dataDir (canonical path check)
+	absPath, err := filepath.Abs(filePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute path: %w", err)
+	}
+
+	// Verify the path is within the data directory
+	if !strings.HasPrefix(absPath, s.dataDir+string(filepath.Separator)) && absPath != s.dataDir {
+		return "", fmt.Errorf("invalid path: attempted directory traversal")
+	}
+
+	return filePath, nil
 }
 
 // AppendData appends data to the organization's CSV file
@@ -42,7 +80,11 @@ func (s *CSVStorage) AppendData(orgID uuid.UUID, data map[string]interface{}) er
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	filePath := filepath.Join(s.dataDir, fmt.Sprintf("%s.csv", orgID.String()))
+	// Validate and sanitize file path
+	filePath, err := s.sanitizeFilePath(orgID)
+	if err != nil {
+		return fmt.Errorf("invalid org ID for file path: %w", err)
+	}
 
 	// Check if file exists to determine if we need to write headers
 	fileExists := false
@@ -95,7 +137,11 @@ func (s *CSVStorage) GetOrgData(orgID uuid.UUID) ([]DataUpload, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	filePath := filepath.Join(s.dataDir, fmt.Sprintf("%s.csv", orgID.String()))
+	// Validate and sanitize file path
+	filePath, err := s.sanitizeFilePath(orgID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid org ID for file path: %w", err)
+	}
 
 	// Check if file exists
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
