@@ -2,7 +2,6 @@ package auth
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"sync"
 	"sync/atomic"

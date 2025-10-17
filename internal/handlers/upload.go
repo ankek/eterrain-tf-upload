@@ -34,6 +34,7 @@ type ResourceUpload struct {
 	Provider     string           `json:"provider"`
 	Category     string           `json:"category"`
 	ResourceType string           `json:"resource_type"`
+	Name         string           `json:"name,omitempty"` // Optional name for the report/upload
 	Instances    []InstanceUpload `json:"instances"`
 }
 
@@ -136,6 +137,11 @@ func (h *UploadHandler) UploadData(w http.ResponseWriter, r *http.Request) {
 			"resource_type": upload.ResourceType,
 		}
 
+		// Add report name if provided
+		if upload.Name != "" {
+			data["report_name"] = upload.Name
+		}
+
 		// Determine resource name from attributes or use index
 		resourceName := ""
 		if name, ok := instance.Attributes["name"].(string); ok && name != "" {
@@ -160,8 +166,12 @@ func (h *UploadHandler) UploadData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Log successful upload
-	log.Printf("DATA: Successful upload - OrgID: %s, Provider: %s, Category: %s, ResourceType: %s, Instances: %d, IP: %s",
+	logMsg := fmt.Sprintf("DATA: Successful upload - OrgID: %s, Provider: %s, Category: %s, ResourceType: %s, Instances: %d, IP: %s",
 		orgID, upload.Provider, upload.Category, upload.ResourceType, len(upload.Instances), r.RemoteAddr)
+	if upload.Name != "" {
+		logMsg += fmt.Sprintf(", ReportName: %s", upload.Name)
+	}
+	log.Print(logMsg)
 
 	// Return success response
 	response := map[string]interface{}{
@@ -169,6 +179,11 @@ func (h *UploadHandler) UploadData(w http.ResponseWriter, r *http.Request) {
 		"message":         fmt.Sprintf("Successfully uploaded %d instance(s)", len(upload.Instances)),
 		"org_id":          orgID.String(),
 		"instances_count": len(upload.Instances),
+	}
+
+	// Include report name in response if provided
+	if upload.Name != "" {
+		response["report_name"] = upload.Name
 	}
 
 	w.Header().Set("Content-Type", "application/json")
