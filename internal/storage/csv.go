@@ -21,9 +21,10 @@ type CSVStorage struct {
 
 // DataUpload represents a single data upload from Terraform provider
 type DataUpload struct {
-	Timestamp time.Time              `json:"timestamp"`
-	OrgID     uuid.UUID              `json:"org_id"`
-	Data      map[string]interface{} `json:"data"`
+	Timestamp  time.Time              `json:"timestamp"`
+	OrgID      uuid.UUID              `json:"org_id"`
+	ReportName string                 `json:"report_name"`
+	Data       map[string]interface{} `json:"data"`
 }
 
 // NewCSVStorage creates a new CSV storage backend
@@ -104,7 +105,13 @@ func (s *CSVStorage) AppendData(orgID uuid.UUID, data map[string]interface{}) er
 
 	timestamp := time.Now().UTC()
 
-	// Convert data to JSON string for storage
+	// Extract report_name from data if present
+	reportName := ""
+	if name, ok := data["report_name"].(string); ok {
+		reportName = name
+	}
+
+	// Convert remaining data to JSON string for storage
 	dataJSON, err := json.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("failed to marshal data: %w", err)
@@ -112,7 +119,7 @@ func (s *CSVStorage) AppendData(orgID uuid.UUID, data map[string]interface{}) er
 
 	// Write header if file is new
 	if !fileExists {
-		header := []string{"timestamp", "org_id", "data"}
+		header := []string{"timestamp", "org_id", "report_name", "data"}
 		if err := writer.Write(header); err != nil {
 			return fmt.Errorf("failed to write CSV header: %w", err)
 		}
@@ -122,6 +129,7 @@ func (s *CSVStorage) AppendData(orgID uuid.UUID, data map[string]interface{}) er
 	row := []string{
 		timestamp.Format(time.RFC3339),
 		orgID.String(),
+		reportName,
 		string(dataJSON),
 	}
 
@@ -170,6 +178,7 @@ func (s *CSVStorage) GetOrgData(orgID uuid.UUID) ([]DataUpload, error) {
 			continue
 		}
 
+		// Support both old format (3 columns) and new format (4 columns)
 		if len(record) < 3 {
 			continue
 		}
@@ -184,15 +193,24 @@ func (s *CSVStorage) GetOrgData(orgID uuid.UUID) ([]DataUpload, error) {
 			continue
 		}
 
+		// Extract report_name if present (new format with 4 columns)
+		reportName := ""
+		dataIndex := 2
+		if len(record) >= 4 {
+			reportName = record[2]
+			dataIndex = 3
+		}
+
 		var data map[string]interface{}
-		if err := json.Unmarshal([]byte(record[2]), &data); err != nil {
+		if err := json.Unmarshal([]byte(record[dataIndex]), &data); err != nil {
 			continue
 		}
 
 		uploads = append(uploads, DataUpload{
-			Timestamp: timestamp,
-			OrgID:     parsedOrgID,
-			Data:      data,
+			Timestamp:  timestamp,
+			OrgID:      parsedOrgID,
+			ReportName: reportName,
+			Data:       data,
 		})
 	}
 

@@ -1,0 +1,56 @@
+# Binaries
+terraform-backend-service
+eterrain-backend
+keygen
+bin/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Data files
+data/
+*.csv
+
+# Test files
+*_test.go
+**/*_test.go
+
+# Build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Documentation
+*.md
+!README.md
+QUICKSTART.md
+prompt.md
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Docker
+.dockerignore
+Dockerfile
+docker-compose.yml
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Misc
+*.log
+run.txt
+.claude/
