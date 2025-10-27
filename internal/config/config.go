@@ -16,8 +16,15 @@ type Config struct {
 	Port int
 
 	// Storage configuration
-	StorageType string // "memory", "file", "s3", etc.
+	StorageType string // "memory", "csv", "mysql", "dual", etc.
 	StoragePath string // Path for file-based storage
+
+	// Database configuration (for MySQL storage)
+	DBHost     string
+	DBPort     int
+	DBUser     string
+	DBPassword string
+	DBName     string
 
 	// Security
 	EnableTLS bool
@@ -42,6 +49,11 @@ func Load() (*Config, error) {
 		Port:        getEnvAsInt("PORT", 7777),
 		StorageType: getEnv("STORAGE_TYPE", "csv"),
 		StoragePath: getEnv("STORAGE_PATH", "./data"),
+		DBHost:      getEnv("DB_HOST", "localhost"),
+		DBPort:      getEnvAsInt("DB_PORT", 3306),
+		DBUser:      getEnv("DB_USER", ""),
+		DBPassword:  getEnv("DB_PASSWORD", ""),
+		DBName:      getEnv("DB_NAME", "data"),
 		EnableTLS:   getEnvAsBool("ENABLE_TLS", false),
 		CertFile:    getEnv("TLS_CERT_FILE", ""),
 		KeyFile:     getEnv("TLS_KEY_FILE", ""),
@@ -116,6 +128,12 @@ func (c *Config) Validate() error {
 // Address returns the server address in host:port format
 func (c *Config) Address() string {
 	return fmt.Sprintf("%s:%d", c.Host, c.Port)
+}
+
+// DSN returns the MySQL Data Source Name connection string
+func (c *Config) DSN() string {
+	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?parseTime=true&charset=utf8mb4",
+		c.DBUser, c.DBPassword, c.DBHost, c.DBPort, c.DBName)
 }
 
 // getEnv retrieves an environment variable or returns a default value

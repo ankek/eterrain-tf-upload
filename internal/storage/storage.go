@@ -52,3 +52,12 @@ type Storage interface {
 	// GetLock retrieves lock information
 	GetLock(orgID uuid.UUID, name string) (*LockInfo, error)
 }
+
+// DataStorage defines the interface for storing data uploads
+type DataStorage interface {
+	// AppendData appends data to the organization's storage
+	AppendData(orgID uuid.UUID, data map[string]interface{}) error
+
+	// GetOrgData retrieves all data for an organization
+	GetOrgData(orgID uuid.UUID) ([]DataUpload, error)
+}

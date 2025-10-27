@@ -76,3 +76,55 @@ demo-api-key-12349
 
 
 security-compliance -> backend-api-security
+
+
+"lets extend functionality. i want to store data in csv files and in mysql db. Data should be stored in DB with name "data", one table per organization with {Org ID} like "11111111-7777-3333-4444-555555555555" and exact same structure as for csv file with timestamp,org_id,data as columnt in such table. i want to run it in docker-compose like 
+```
+version: '3.8'
+services:
+  eterrain-tf-backend:
+    image: 8589344fc185
+    container_name: terraform-backend
+#    ports:
+#      - "${HOST_PORT:-7777}:7777"
+    environment:
+      - VIRTUAL_HOST=tf.eterrain.ee
+      - LETSENCRYPT_HOST=tf.eterrain.ee
+      - LETSENCRYPT_EMAIL=ankek777@gmail.com
+      - HOST=0.0.0.0
+      - PORT=7777
+      - STORAGE_TYPE=${STORAGE_TYPE:-csv}
+      - STORAGE_PATH=/app/data
+      - ENABLE_TLS=${ENABLE_TLS:-false}
+      - TLS_CERT_FILE=${TLS_CERT_FILE:-}
+      - TLS_KEY_FILE=${TLS_KEY_FILE:-}
+    volumes:
+      # Persist data directory
+      - ./data:/app/data
+      # Mount auth configuration (read-only)
+      - ./auth.cfg:/app/auth.cfg:ro
+      # Optional: Mount TLS certificates if needed
+      # - ./certs:/app/certs:ro
+    restart: unless-stopped
+
+  db:
+    image: mysql:8.4
+    restart: always
+    environment:
+      MYSQL_DATABASE: exampledb
+      MYSQL_USER: exampleuser
+      MYSQL_PASSWORD: yrA7MpQwKVxAfWP6XhZ54mtG7qZZfVzHe7mULWmFsgzY6krSUZ
+      MYSQL_RANDOM_ROOT_PASSWORD: '1'
+    volumes:
+      - ./db:/var/lib/mysql
+
+volumes:
+  wordpress:
+  db:
+
+networks:
+  default:
+    external:
+      name: nginx-proxy
+```
+" backend-architect → database-architect → frontend-developer → test-automator → security-auditor

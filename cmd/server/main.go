@@ -32,20 +32,48 @@ func main() {
 
 	// Initialize storage
 	var store storage.Storage
-	var csvStore *storage.CSVStorage
+	var dataStore storage.DataStorage
 	switch cfg.StorageType {
 	case "memory":
 		store = storage.NewMemoryStorage()
 		log.Println("Using in-memory storage")
 	case "csv":
-		var err error
-		csvStore, err = storage.NewCSVStorage(cfg.StoragePath)
+		csvStore, err := storage.NewCSVStorage(cfg.StoragePath)
 		if err != nil {
 			log.Fatalf("Failed to initialize CSV storage: %v", err)
 		}
+		dataStore = csvStore
 		log.Printf("Using CSV storage at: %s", cfg.StoragePath)
+	case "mysql":
+		mysqlStore, err := storage.NewMySQLStorage(cfg.DSN(), cfg.DBName)
+		if err != nil {
+			log.Fatalf("Failed to initialize MySQL storage: %v", err)
+		}
+		defer mysqlStore.Close()
+		dataStore = mysqlStore
+		log.Printf("Using MySQL storage at: %s:%d/%s", cfg.DBHost, cfg.DBPort, cfg.DBName)
+	case "dual":
+		// Initialize both CSV and MySQL storage
+		csvStore, err := storage.NewCSVStorage(cfg.StoragePath)
+		if err != nil {
+			log.Fatalf("Failed to initialize CSV storage: %v", err)
+		}
+		log.Printf("CSV storage initialized at: %s", cfg.StoragePath)
+
+		mysqlStore, err := storage.NewMySQLStorage(cfg.DSN(), cfg.DBName)
+		if err != nil {
+			log.Fatalf("Failed to initialize MySQL storage: %v", err)
+		}
+		defer mysqlStore.Close()
+		log.Printf("MySQL storage initialized at: %s:%d/%s", cfg.DBHost, cfg.DBPort, cfg.DBName)
+
+		// Create dual storage wrapper
+		dualStore := storage.NewDualStorage(csvStore, mysqlStore)
+		defer dualStore.Close()
+		dataStore = dualStore
+		log.Println("Using dual storage (CSV + MySQL)")
 	default:
-		log.Fatalf("Unsupported storage type: %s", cfg.StorageType)
+		log.Fatalf("Unsupported storage type: %s (supported: memory, csv, mysql, dual)", cfg.StorageType)
 	}
 
 	// Initialize credential store from auth.cfg file
@@ -74,8 +102,8 @@ func main() {
 	if store != nil {
 		stateHandler = handlers.NewStateHandler(store)
 	}
-	if csvStore != nil {
-		uploadHandler = handlers.NewUploadHandler(csvStore)
+	if dataStore != nil {
+		uploadHandler = handlers.NewUploadHandler(dataStore)
 	}
 	healthHandler := handlers.NewHealthHandler(version)
 

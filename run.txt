@@ -1,1 +1,10 @@
 make build &&  ./terraform-backend-service
+
+
+docker run -p 7777:7777 -it 8589344fc185 /bin/ash
+docker run -p 7777:7777 -e HOST=0.0.0.0 -it 8589344fc185
+
+
+
+http://127.0.0.1:7777/api/v1/upload
+http://127.0.0.1:7777/health

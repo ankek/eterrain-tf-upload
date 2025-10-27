@@ -14,13 +14,13 @@ import (
 
 // UploadHandler handles data upload operations from Terraform provider
 type UploadHandler struct {
-	csvStorage *storage.CSVStorage
+	dataStorage storage.DataStorage
 }
 
 // NewUploadHandler creates a new upload handler
-func NewUploadHandler(csvStorage *storage.CSVStorage) *UploadHandler {
+func NewUploadHandler(dataStorage storage.DataStorage) *UploadHandler {
 	return &UploadHandler{
-		csvStorage: csvStorage,
+		dataStorage: dataStorage,
 	}
 }
 
@@ -158,8 +158,8 @@ func (h *UploadHandler) UploadData(w http.ResponseWriter, r *http.Request) {
 			data[k] = v
 		}
 
-		// Append data to CSV file
-		if err := h.csvStorage.AppendData(orgID, data); err != nil {
+		// Append data to storage (CSV, MySQL, or both)
+		if err := h.dataStorage.AppendData(orgID, data); err != nil {
 			http.Error(w, fmt.Sprintf("Failed to store data: %v", err), http.StatusInternalServerError)
 			return
 		}
@@ -199,8 +199,8 @@ func (h *UploadHandler) GetOrgData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Retrieve data from CSV file
-	uploads, err := h.csvStorage.GetOrgData(orgID)
+	// Retrieve data from storage (CSV, MySQL, or both)
+	uploads, err := h.dataStorage.GetOrgData(orgID)
 	if err != nil {
 		log.Printf("ERROR: Failed to retrieve data for org %s - Error: %v", orgID, err)
 		http.Error(w, "Failed to retrieve data", http.StatusInternalServerError)

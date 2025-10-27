@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Install git and ca-certificates (needed for fetching dependencies)
 RUN apk add --no-cache git ca-certificates tzdata
@@ -51,9 +51,12 @@ USER appuser
 # Expose port (default 7777)
 EXPOSE 7777
 
+# Set default HOST to 0.0.0.0 for Docker (can be overridden by environment variable)
+ENV HOST=0.0.0.0
+
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:7777/health || exit 1
+#HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+#    CMD wget --no-verbose --tries=1 --spider http://localhost:7777/health || exit 1
 
 # Run the application
 CMD ["./terraform-backend-service"]

@@ -1,57 +1,66 @@
-version: '3.8'
+#version: '3.8'
 services:
   eterrain-tf-backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: terraform-backend-service:latest
+    # build: .
     container_name: terraform-backend
-    ports:
-      - "${HOST_PORT:-7777}:7777"
+    image: terraform-backend:latest
+    depends_on:
+      db:
+        condition: service_healthy
     environment:
+      # - VIRTUAL_HOST=${VIRTUAL_HOST:-tf.eterrain.ee}
+      # - LETSENCRYPT_HOST=${LETSENCRYPT_HOST:-tf.eterrain.ee}
+      # - LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL:-ankek777@gmail.com}
       - HOST=0.0.0.0
       - PORT=7777
-      - STORAGE_TYPE=${STORAGE_TYPE:-csv}
+      - STORAGE_TYPE=dual
       - STORAGE_PATH=/app/data
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_USER=exampleuser
+      - DB_PASSWORD=yrA7MpQwKVxAfWP6XhZ54mtG7qZZfVzHe7mULWmFsgzY6krSUZ
+      - DB_NAME=data
       - ENABLE_TLS=${ENABLE_TLS:-false}
       - TLS_CERT_FILE=${TLS_CERT_FILE:-}
       - TLS_KEY_FILE=${TLS_KEY_FILE:-}
     volumes:
-      # Persist data directory
+      # Persist data directory for CSV storage
       - ./data:/app/data
       # Mount auth configuration (read-only)
       - ./auth.cfg:/app/auth.cfg:ro
       # Optional: Mount TLS certificates if needed
       # - ./certs:/app/certs:ro
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7777/health"]
-      interval: 30s
-      timeout: 3s
-      start_period: 5s
-      retries: 3
-    networks:
-      - terraform-backend-net
-    # Resource limits (adjust as needed)
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 512M
-        reservations:
-          cpus: '0.25'
-          memory: 128M
-    # Security options
-    security_opt:
-      - no-new-privileges:true
-    read_only: false
-    # Logging configuration
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    # Expose port only if not using nginx-proxy
+    # Uncomment the line below if you're not using nginx-proxy
+    ports:
+      - "7777:7777"
 
-networks:
-  terraform-backend-net:
-    driver: bridge
+  db:
+    image: mysql:8.4
+    container_name: terraform-backend-db
+    restart: always
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:-data}
+      MYSQL_USER: ${DB_USER:-exampleuser}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-yrA7MpQwKVxAfWP6XhZ54mtG7qZZfVzHe7mULWmFsgzY6krSUZ}
+      MYSQL_RANDOM_ROOT_PASSWORD: '1'
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    # Uncomment the line below to expose MySQL port for debugging
+    ports:
+      - "3306:3306"
+
+volumes:
+  db_data:
+
+# networks:
+#   default:
+#     external:
+#       name: nginx-proxy
