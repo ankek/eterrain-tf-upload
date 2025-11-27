@@ -1,0 +1,589 @@
+openapi: 3.0.3
+info:
+  title: Terraform Backend Service API
+  description: |
+    A backend service for storing Terraform state and managing custom data uploads from Terraform providers.
+
+    This service provides two main functionalities:
+    1. **Terraform State Backend**: Standard Terraform HTTP backend for storing and managing infrastructure state with locking support
+    2. **Data Upload API**: Custom endpoint for Terraform providers to upload resource data to CSV storage
+
+    ## Authentication
+    All API endpoints (except /health) require authentication using custom headers:
+    - `X-Org-ID`: Organization UUID
+    - `X-API-Key`: API key for authentication
+  version: 1.0.0
+  contact:
+    name: Terraform Backend Service
+servers:
+  - url: http://localhost:7777
+    description: Local development server
+  - url: http://0.0.0.0:7777
+    description: Server listening on all interfaces
+
+tags:
+  - name: Health
+    description: Service health check endpoints
+  - name: Data Upload
+    description: Custom data upload endpoints for Terraform providers
+  - name: State Management
+    description: Terraform state backend API endpoints
+  - name: State Locking
+    description: State locking and unlocking operations
+
+paths:
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Returns the service health status and version information
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: healthy
+                version: 1.0.0
+                service: terraform-backend-service
+
+  /api/v1/upload:
+    post:
+      tags:
+        - Data Upload
+      summary: Upload data
+      description: Upload resource data from Terraform provider to CSV storage using hierarchical structure
+      operationId: uploadData
+      security:
+        - OrgAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourceUpload'
+            examples:
+              droplet1:
+                summary: DigitalOcean Droplet web-1
+                value:
+                  provider: DIGITALOCEAN
+                  category: compute
+                  resource_type: digitalocean_droplet
+                  resource_name: web-1
+                  properties:
+                    size: s-1vcpu-1gb
+              droplet2:
+                summary: DigitalOcean Droplet web-2
+                value:
+                  provider: DIGITALOCEAN
+                  category: compute
+                  resource_type: digitalocean_droplet
+                  resource_name: web-2
+                  properties:
+                    size: s-2vcpu-2gb
+              autoscale:
+                summary: DigitalOcean Autoscale Group
+                value:
+                  provider: DIGITALOCEAN
+                  category: compute
+                  resource_type: digitalocean_droplet_autoscale
+                  resource_name: terraform-example
+                  properties:
+                    min_instances: 10
+                    max_instances: 50
+                    size: c-2
+      responses:
+        '200':
+          description: Data uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResponse'
+        '400':
+          description: Invalid request body
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: "Failed to decode request body: invalid JSON"
+        '401':
+          description: Unauthorized - missing or invalid authentication headers
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: Unauthorized
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: "Failed to store data: storage error"
+
+  /api/v1/data:
+    get:
+      tags:
+        - Data Upload
+      summary: Get organization data
+      description: Retrieve all uploaded data for the authenticated organization
+      operationId: getOrgData
+      security:
+        - OrgAuth: []
+      responses:
+        '200':
+          description: Data retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgDataResponse'
+        '401':
+          description: Unauthorized - missing or invalid authentication headers
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: Unauthorized
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: "Failed to retrieve data: storage error"
+
+  /api/v1/state/{name}:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        description: Name of the Terraform state
+        schema:
+          type: string
+        example: production
+
+    get:
+      tags:
+        - State Management
+      summary: Get state
+      description: Retrieve Terraform state data for the specified state name
+      operationId: getState
+      security:
+        - OrgAuth: []
+      responses:
+        '200':
+          description: State retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Terraform state JSON
+        '400':
+          description: State name is missing or invalid
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: State name is required
+        '401':
+          description: Unauthorized
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: Unauthorized
+        '404':
+          description: State not found
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: State not found
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: "Failed to retrieve state: storage error"
+
+    post:
+      tags:
+        - State Management
+      summary: Put state
+      description: Store or update Terraform state data
+      operationId: putState
+      security:
+        - OrgAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Terraform state JSON
+            example:
+              version: 4
+              terraform_version: "1.5.0"
+              serial: 1
+              lineage: "8f3e9d2a-1234-5678-9abc-def012345678"
+              outputs: {}
+              resources: []
+      responses:
+        '200':
+          description: State stored successfully
+        '400':
+          description: Invalid request - state name missing or invalid JSON
+          content:
+            text/plain:
+              schema:
+                type: string
+              examples:
+                missingName:
+                  value: State name is required
+                invalidJson:
+                  value: Invalid JSON state data
+        '401':
+          description: Unauthorized
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: Unauthorized
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: "Failed to store state: storage error"
+
+    delete:
+      tags:
+        - State Management
+      summary: Delete state
+      description: Delete Terraform state data
+      operationId: deleteState
+      security:
+        - OrgAuth: []
+      responses:
+        '200':
+          description: State deleted successfully
+        '400':
+          description: State name is missing
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: State name is required
+        '401':
+          description: Unauthorized
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: Unauthorized
+        '404':
+          description: State not found
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: State not found
+        '423':
+          description: State is locked
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: State is locked
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: "Failed to delete state: storage error"
+
+  /api/v1/state/{name}/lock:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        description: Name of the Terraform state
+        schema:
+          type: string
+        example: production
+
+    post:
+      tags:
+        - State Locking
+      summary: Lock state
+      description: Acquire a lock on the Terraform state
+      operationId: lockState
+      security:
+        - OrgAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LockInfo'
+      responses:
+        '200':
+          description: State locked successfully
+        '400':
+          description: Invalid request - state name missing or invalid lock info
+          content:
+            text/plain:
+              schema:
+                type: string
+              examples:
+                missingName:
+                  value: State name is required
+                invalidLockInfo:
+                  value: "Failed to decode lock info: invalid JSON"
+        '401':
+          description: Unauthorized
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: Unauthorized
+        '423':
+          description: State is already locked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LockInfo'
+              description: Current lock information
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: "Failed to lock state: storage error"
+
+    delete:
+      tags:
+        - State Locking
+      summary: Unlock state
+      description: Release a lock on the Terraform state
+      operationId: unlockState
+      security:
+        - OrgAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - ID
+              properties:
+                ID:
+                  type: string
+                  description: Lock ID to verify ownership
+              example:
+                ID: "abc123-lock-id"
+      responses:
+        '200':
+          description: State unlocked successfully
+        '400':
+          description: Invalid request - state name missing or invalid lock info
+          content:
+            text/plain:
+              schema:
+                type: string
+              examples:
+                missingName:
+                  value: State name is required
+                invalidLockInfo:
+                  value: "Failed to decode lock info: invalid JSON"
+        '401':
+          description: Unauthorized
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: Unauthorized
+        '409':
+          description: State is not locked
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: State is not locked
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: "Failed to unlock state: storage error"
+
+components:
+  securitySchemes:
+    OrgAuth:
+      type: apiKey
+      in: header
+      name: X-Org-ID
+      description: |
+        Organization authentication requires two headers:
+        - `X-Org-ID`: Organization UUID
+        - `X-API-Key`: API key for authentication
+
+        Example:
+        ```
+        X-Org-ID: 11111111-2222-3333-4444-555555555555
+        X-API-Key: demo-api-key-12345
+        ```
+
+  schemas:
+    ResourceUpload:
+      type: object
+      required:
+        - provider
+        - category
+        - resource_type
+        - resource_name
+        - properties
+      properties:
+        provider:
+          type: string
+          description: Cloud provider name (e.g., DIGITALOCEAN, AWS, AZURE, GCP)
+          example: DIGITALOCEAN
+        category:
+          type: string
+          description: Resource category (e.g., compute, storage, networking)
+          example: compute
+        resource_type:
+          type: string
+          description: Terraform resource type (e.g., digitalocean_droplet, aws_instance)
+          example: digitalocean_droplet
+        resource_name:
+          type: string
+          description: Name/identifier of the specific resource instance
+          example: web-1
+        properties:
+          type: object
+          additionalProperties: true
+          description: Resource-specific properties (e.g., size, region, tags)
+          example:
+            size: s-1vcpu-1gb
+            region: nyc1
+            status: running
+
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - version
+        - service
+      properties:
+        status:
+          type: string
+          description: Health status of the service
+          example: healthy
+        version:
+          type: string
+          description: Service version
+          example: 1.0.0
+        service:
+          type: string
+          description: Service name
+          example: terraform-backend-service
+
+    UploadResponse:
+      type: object
+      required:
+        - status
+        - message
+        - org_id
+      properties:
+        status:
+          type: string
+          description: Upload status
+          example: success
+        message:
+          type: string
+          description: Success message
+          example: Data uploaded successfully
+        org_id:
+          type: string
+          format: uuid
+          description: Organization ID
+          example: 11111111-2222-3333-4444-555555555555
+
+    OrgDataResponse:
+      type: object
+      required:
+        - org_id
+        - count
+        - data
+      properties:
+        org_id:
+          type: string
+          format: uuid
+          description: Organization ID
+          example: 11111111-2222-3333-4444-555555555555
+        count:
+          type: integer
+          description: Number of data records
+          example: 2
+        data:
+          type: array
+          description: Array of uploaded data records
+          items:
+            type: object
+            additionalProperties: true
+          example:
+            - resource_type: vm_instance
+              resource_name: web-server-01
+              status: running
+              region: us-east-1
+            - resource_type: database
+              resource_name: postgres-prod
+              status: active
+              region: eu-west-1
+              size: large
+
+    LockInfo:
+      type: object
+      required:
+        - ID
+      properties:
+        ID:
+          type: string
+          description: Unique lock identifier
+          example: abc123-lock-id
+        Operation:
+          type: string
+          description: Operation being performed
+          example: OperationTypeApply
+        Info:
+          type: string
+          description: Additional information about the lock
+          example: Terraform apply operation
+        Who:
+          type: string
+          description: Identity of the lock holder
+          example: user@example.com
+        Version:
+          type: string
+          description: Terraform version
+          example: 1.5.0
+        Created:
+          type: string
+          format: date-time
+          description: Lock creation timestamp
+          example: "2025-10-12T14:52:09Z"
+        Path:
+          type: string
+          description: Path to the state file
+          example: /path/to/state

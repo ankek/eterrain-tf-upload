@@ -2,24 +2,32 @@
   ============================================================================
   SYNC IMPACT REPORT
   ============================================================================
-  Version Change: 1.0.0 → 1.1.0
+  Version Change: 1.2.1 → 1.2.2
 
-  Modified Principles:
-  - [NEW] VII. DRY (Don't Repeat Yourself)
-  - [NEW] VIII. KISS (Keep It Simple)
+  Modified Principles: None (testing requirements already fully defined in 1.2.1)
 
-  Added Sections:
-  - Two new core principles (DRY and KISS)
+  Added Sections: None
 
   Removed Sections: None
 
   Templates Status:
-  ✅ spec-template.md - Aligned with simplicity requirements
-  ✅ plan-template.md - Constitution Check will include new principles
-  ✅ tasks-template.md - Task structure supports DRY/KISS validation
-  ✅ command files - Generic references maintained
+  ✅ spec-template.md - No changes required (already aligned)
+  ✅ plan-template.md - No changes required (already aligned)
+  ✅ tasks-template.md - Updated to enforce mandatory testing (was inconsistent)
+     - Changed test sections from "OPTIONAL" to "MANDATORY - Write First"
+     - Updated header note to reference constitution Section IV
+     - Aligned with test-first development requirements
 
-  Follow-up TODOs: None
+  Follow-up TODOs:
+  - Existing ./tests/ directory structure should be validated
+  - Future feature tasks must include mandatory test tasks per constitution
+  - All pull requests must verify test-first compliance per Section IV
+
+  Rationale for PATCH bump (1.2.1 → 1.2.2):
+  - Constitution principles unchanged (Section IV already comprehensive)
+  - Template alignment fix only (tasks-template.md consistency)
+  - No semantic changes to governance or requirements
+  - Purely clarification to remove "OPTIONAL" language that conflicted with constitution
   ============================================================================
 -->
 
@@ -63,14 +71,22 @@ System architecture MUST use interface abstractions for flexibility:
 
 ### IV. Comprehensive Testing
 
-Testing MUST cover correctness, security, integration, and performance:
+Testing MUST follow test-first development principles and cover correctness, security, integration, and performance:
+- **Test-First Development**: Tests MUST be written BEFORE implementation code for all new features and functions
+- **Test Organization**: Tests MUST be stored in structured ./tests/ directory hierarchy:
+  - `./tests/unit-tests/` for unit tests of individual functions and components
+  - `./tests/integration-tests/` for integration tests (database operations, API workflows, multi-component interactions)
+  - `./tests/edge-case-tests/` for boundary conditions and error scenarios
+  - `./tests/performance-tests/` for load testing and timing-attack resistance
+- **Test Numbering**: Test files MUST follow the same numbering strategy as specification features (e.g., `001-auth-test.go` for feature 001)
 - **Test Categories**: MUST include unit tests, integration tests, edge case tests, and performance tests
 - **Security Testing**: Authentication, validation, and rate limiting MUST have dedicated test suites
-- **Test Helpers**: Reusable test utilities MUST be provided (testutil package) to ensure consistency
-- **Performance Benchmarks**: Load testing and timing-attack resistance MUST be validated
-- **Edge Case Coverage**: Boundary conditions, malformed inputs, and failure scenarios MUST be tested
+- **Test Helpers**: Reusable test utilities MUST be provided in shared test packages to ensure consistency
+- **Database Tests**: Integration tests MUST validate database operations (CRUD, isolation, transactions, failure modes)
+- **Post-Development Validation**: All tests MUST pass before code is considered complete
+- **Coverage Requirements**: Unit tests MUST achieve minimum 80% code coverage for critical paths (auth, validation, storage)
 
-**Rationale**: Multi-tenant services require rigorous testing. A bug affecting authentication or storage could impact all organizations.
+**Rationale**: Multi-tenant services require rigorous testing. A bug affecting authentication or storage could impact all organizations. Test-first development ensures features are properly specified and validated before implementation, reducing defects and rework. Structured test organization enables efficient test execution and maintenance.
 
 ### V. Defensive Validation
 
@@ -99,7 +115,7 @@ Operations MUST be observable and debuggable in production:
 Code and configuration MUST eliminate duplication through abstraction and reuse:
 - **Shared Logic**: Validation, authentication, and storage patterns MUST be centralized in reusable packages
 - **Configuration**: Environment variables and defaults MUST be defined once in config package, not scattered
-- **Test Utilities**: Common test setup, fixtures, and assertions MUST use testutil helpers
+- **Test Utilities**: Common test setup, fixtures, and assertions MUST use shared helpers in ./tests/testutil/
 - **Storage Implementations**: Common operations (append, read, isolation) MUST share code via interfaces
 - **Error Messages**: Standard error responses MUST use shared functions, not duplicate strings
 - **No Copy-Paste**: Similar code blocks MUST be refactored into functions or methods
@@ -118,6 +134,18 @@ Simplicity MUST be preferred over cleverness or premature optimization:
 
 **Rationale**: Simple code is easier to understand, debug, and maintain. The service has clear requirements (auth, storage, validation) that don't require complex patterns. Complexity should only be added when solving actual problems, not hypothetical ones.
 
+### IX. Data Upload-Only Operations
+
+The service is designed for data ingestion and processing, NOT file distribution:
+- **Upload Focus**: Primary operations are POST (upload) and storage processing, NOT GET (download)
+- **No Direct File Access**: CSV files and MySQL database MUST NOT be directly accessible via HTTP endpoints
+- **No File Serving**: Service MUST NOT implement file download, export, or bulk data retrieval endpoints beyond minimal operational needs
+- **Processed Data Only**: GET /api/v1/data MUST return processed, formatted JSON responses, NOT raw file contents or streams
+- **No Backup Downloads**: Backup and data export operations MUST be handled via administrative tools (database dumps, file system access), NOT API endpoints
+- **Read Restrictions**: Data retrieval endpoints MUST be limited to operational visibility (recent uploads, status checks), NOT full historical data dumps
+
+**Rationale**: This service is purpose-built for data upload, processing, and storage in MySQL. Allowing file downloads creates security risks (data exfiltration), performance issues (large file transfers), and operational complexity (caching, bandwidth management). Organizations upload data for processing and storage; they do not need to download entire datasets via API. Administrative data access should use proper database tools and file system access with appropriate permissions.
+
 ## Architecture Constraints
 
 ### Technology Stack
@@ -126,6 +154,7 @@ Simplicity MUST be preferred over cleverness or premature optimization:
 - **Database**: MySQL 8.4+ (when using MySQL or dual storage mode)
 - **Dependencies**: Minimal external dependencies, prefer standard library where possible
 - **Authentication**: File-based credential store with bcrypt hashing and fsnotify watching
+- **Testing Framework**: Go standard testing library (testing package) with testify for assertions (optional)
 
 ### Deployment Requirements
 - **Container Support**: MUST provide Dockerfile with proper health checks and signal handling
@@ -133,39 +162,86 @@ Simplicity MUST be preferred over cleverness or premature optimization:
 - **Environment Configuration**: ALL runtime configuration MUST be via environment variables (no hardcoded values)
 - **Port Binding**: MUST bind to 0.0.0.0 in container mode, configurable via HOST environment variable
 - **Volume Persistence**: CSV data and auth.cfg MUST be mountable volumes for persistence
+- **Storage Access Control**: CSV storage directory and MySQL database MUST NOT be accessible via HTTP file serving
 
 ### API Contracts
 - **Authentication Headers**: X-Org-ID (UUID format) and X-API-Key (string token) MUST be required for all protected endpoints
 - **Data Upload**: POST /api/v1/upload MUST accept hierarchical JSON with provider, category, resource_type, instances
-- **Data Retrieval**: GET /api/v1/data MUST return all uploads for authenticated organization
+- **Data Retrieval**: GET /api/v1/data MUST return processed JSON (NOT raw files) for authenticated organization with pagination and filtering
 - **State Backend**: MUST support Terraform HTTP backend protocol for /api/v1/state/{name} endpoints
 - **HTTP Status Codes**: MUST use appropriate codes (401 unauthorized, 400 validation, 500 server error, 200 success)
+- **No File Downloads**: Service MUST NOT expose endpoints for downloading CSV files, database dumps, or bulk data exports
 
 ## Development Workflow
 
 ### Code Organization
-- **Project Structure**: cmd/ for entry points, internal/ for application code, tests alongside implementation
+- **Project Structure**: cmd/ for entry points, internal/ for application code, ./tests/ for all test files
+- **Test Directory Structure**:
+  ```
+  ./tests/
+  ├── unit-tests/           # Unit tests for functions and components
+  │   ├── 001-auth-test.go
+  │   ├── 002-validation-test.go
+  │   └── ...
+  ├── integration-tests/    # Integration tests for multi-component workflows
+  │   ├── 001-database-ops-test.go
+  │   ├── 002-api-workflow-test.go
+  │   └── ...
+  ├── edge-case-tests/      # Boundary conditions and error scenarios
+  │   └── ...
+  ├── performance-tests/    # Load testing and benchmarks
+  │   └── ...
+  └── testutil/             # Shared test helpers and fixtures
+      └── helpers.go
+  ```
 - **Package Separation**: auth/, handlers/, storage/, config/, middleware/, validation/ MUST remain independent
 - **Interface Files**: storage.go MUST define interfaces before implementations
 - **Configuration**: config/ MUST centralize all environment variable loading with validation
+
+### Test-First Development Workflow
+1. **Write Test First**: For each new feature or function, write the test BEFORE writing implementation code
+2. **Test Fails**: Run the test and verify it fails (Red phase in TDD)
+3. **Implement Feature**: Write minimal code to make the test pass (Green phase in TDD)
+4. **Refactor**: Clean up code while keeping tests passing (Refactor phase in TDD)
+5. **Integration Tests**: Write integration tests for database operations and multi-component interactions
+6. **Validation**: All tests MUST pass before feature is considered complete
 
 ### Security Review Requirements
 - **Authentication Changes**: MUST be reviewed for timing attacks and constant-time comparison
 - **Validation Changes**: MUST verify all input paths are covered and limits are enforced
 - **Storage Changes**: MUST verify organization isolation is maintained
 - **Rate Limiting**: MUST verify per-organization tracking and proper cleanup
+- **API Endpoint Changes**: New GET endpoints MUST be reviewed to prevent file download capabilities
+- **Test Coverage**: Security-critical code MUST have 100% test coverage
 
 ### Documentation Standards
 - **README**: MUST include API examples, configuration options, deployment instructions, and security considerations
 - **Code Comments**: Complex security logic MUST have explanatory comments
 - **Deployment Docs**: MUST provide docker-compose examples and troubleshooting guides
 - **Architecture Docs**: Changes to storage modes or authentication MUST update relevant .md files
+- **API Documentation**: MUST explicitly document that file download operations are NOT supported
+- **Test Documentation**: Each test file MUST include comments explaining test purpose and coverage
 
 ### DRY and KISS Review Checklist
 - **Code Review**: Flag duplicate validation logic, repeated error handling, or copy-pasted functions
 - **Complexity Check**: Question nested abstractions, unused flexibility, or speculative features
 - **Dependency Review**: New dependencies MUST justify why standard library is insufficient
 - **Refactoring**: When fixing bugs in similar code blocks, consolidate them first
+- **Test Duplication**: Flag duplicate test setup or assertions; refactor into shared helpers
+
+### Upload-Only Enforcement Checklist
+- **New Endpoints**: Review all new GET endpoints to ensure they return processed data, not file streams
+- **Storage Exposure**: Verify storage directories are not accessible via static file serving or directory listing
+- **Data Export**: Question any feature that allows bulk data retrieval or export functionality
+- **Download Headers**: Ensure responses do not include Content-Disposition: attachment headers
+
+### Test Quality Checklist
+- **Test Isolation**: Each test MUST be independent and not rely on execution order
+- **Test Data**: Use fixtures and test utilities from ./tests/testutil/ for consistent test data
+- **Database Tests**: Integration tests MUST use test databases or transactions that rollback after each test
+- **Cleanup**: Tests MUST clean up resources (files, database records, connections) after execution
+- **Naming Convention**: Test files MUST follow numbering aligned with specification features
+- **Assertion Clarity**: Test assertions MUST clearly indicate what is being validated
 
 ## Governance
 
@@ -179,9 +255,10 @@ This constitution supersedes all other development practices. All features, chan
 - **Version Bump**: MAJOR for principle removal/redefinition, MINOR for additions, PATCH for clarifications
 
 ### Compliance Verification
-- **Pull Requests**: MUST verify compliance with Security-First, Validation, Testing, DRY, and KISS principles
-- **Code Review**: MUST check for interface violations, hardcoded values, duplication, and unnecessary complexity
+- **Pull Requests**: MUST verify compliance with Security-First, Validation, Testing, DRY, KISS, and Upload-Only principles
+- **Code Review**: MUST check for interface violations, hardcoded values, duplication, unnecessary complexity, and file download capabilities
 - **Testing**: New features MUST include tests covering security, edge cases, and integration scenarios
+- **Test-First**: Pull requests MUST demonstrate that tests were written before implementation (test commit timestamp before implementation commit)
 - **Documentation**: Changes affecting deployment or configuration MUST update relevant documentation
 
 ### Complexity Justification
@@ -192,4 +269,18 @@ Any deviation from simplicity MUST be explicitly justified (KISS enforcement):
 - **Additional Interfaces**: MUST justify why existing Storage/DataStorage interfaces are insufficient
 - **Abstractions**: MUST show three concrete use cases before adding new abstraction layers
 
-**Version**: 1.1.0 | **Ratified**: 2025-11-24 | **Last Amended**: 2025-11-24
+### Upload-Only Justification
+Any deviation from upload-only operations MUST be explicitly justified:
+- **New Retrieval Endpoints**: MUST justify operational need and demonstrate processed data (not file) response
+- **Bulk Data Access**: MUST justify why administrative database/file system access is insufficient
+- **Export Features**: MUST justify business need and demonstrate it cannot be solved via external tools
+- **Download Capabilities**: MUST be explicitly rejected unless critical operational need is documented
+
+### Test-First Compliance
+Any deviation from test-first development MUST be explicitly justified:
+- **Implementation-First Code**: MUST justify why tests could not be written first (e.g., exploratory spike)
+- **Missing Tests**: MUST justify why certain code paths are not tested (e.g., vendor code, generated code)
+- **Test Organization**: Deviations from ./tests/ structure MUST be documented with rationale
+- **Coverage Gaps**: Sub-80% coverage MUST be justified with plan to increase coverage
+
+**Version**: 1.2.2 | **Ratified**: 2025-11-24 | **Last Amended**: 2025-11-27
