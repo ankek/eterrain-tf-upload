@@ -5,6 +5,16 @@
 **Status**: Draft
 **Input**: User description: "i want to have automated tests that test application functions and features. Write Tests First - store tests in 'tests' dir. Unit tests under ./tests/unit-tests, integration tests under ./tests/integration-tests, and so on. follow same number strategy as in specification - Write unit tests for application functions and features - Write integration tests for database operations - Validate everything works as expected after development phase"
 
+## Clarifications
+
+### Session 2025-11-29
+
+- Q: When integration tests cannot connect to the test database (connection refused, wrong credentials, database doesn't exist), what should happen? → A: Tests should skip with clear message if database is unavailable
+- Q: The spec mentions "timing attack resistance" for security-critical code but doesn't specify what this means. What measurable criteria defines timing attack resistance? → A: Response time <100ms for all authentication operations under normal load
+- Q: What happens when integration tests fail to clean up test data (database transaction rollback failures)? → A: Log warning and mark test as passed (transaction already rolled back cleanup state)
+- Q: How are test fixtures and shared test data managed to avoid duplication across test files? → A: Test fixtures stored in `./tests/testutil/fixtures/` with helper functions in `./tests/testutil/` for loading and setup
+- Q: What happens when performance tests run on underpowered hardware and fail timing thresholds? → A: Mark performance tests as skipped with environment warning when run on underpowered hardware
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Developer writes new feature with tests first (Priority: P1)
@@ -51,7 +61,7 @@ Developers write tests for boundary conditions, error scenarios, and edge cases 
 
 1. **Given** a function with input validation, **When** developer writes edge case tests in `./tests/edge-case-tests/`, **Then** tests validate boundary conditions (empty, null, max size, negative values)
 2. **Given** error handling code, **When** developer writes error scenario tests, **Then** tests verify proper error messages and recovery behavior
-3. **Given** security-critical code (authentication, validation), **When** developer writes security edge cases, **Then** tests verify rate limiting, timing attack resistance, and injection prevention
+3. **Given** security-critical code (authentication, validation), **When** developer writes security edge cases, **Then** tests verify rate limiting, response time <100ms for auth operations (timing attack resistance), and injection prevention
 
 ---
 
@@ -66,7 +76,7 @@ Developers write performance tests to validate timing constraints, load handling
 **Acceptance Scenarios**:
 
 1. **Given** a performance-critical function, **When** developer writes benchmark test in `./tests/performance-tests/`, **Then** test measures execution time and reports performance metrics
-2. **Given** authentication code, **When** developer writes timing-attack resistance tests, **Then** tests verify constant-time comparison operations
+2. **Given** authentication code, **When** developer writes timing-attack resistance tests, **Then** tests verify response time <100ms for authentication operations under normal load (preventing timing analysis attacks)
 3. **Given** API endpoints, **When** developer writes load tests, **Then** tests simulate concurrent requests and validate rate limiting behavior
 
 ---
@@ -90,25 +100,29 @@ Developers run the complete test suite and ensure all tests pass before consider
 ### Edge Cases
 
 - What happens when a test file doesn't follow the numbering convention (XXX-name-test)?
-- How does the system handle tests that require external dependencies (database, network) that aren't available?
-- What happens when integration tests fail to clean up test data (database transaction rollback failures)?
+- **Resolved**: When integration tests cannot connect to the test database (unavailable, wrong credentials, doesn't exist), tests skip with clear diagnostic message using `t.Skip()`, allowing unit tests to run independently
+- **Resolved**: When integration tests fail to clean up test data (transaction rollback failures), log warning and mark test result based on test assertions (cleanup failure doesn't override test outcome since transaction already handles rollback state)
 - How are flaky tests (tests that intermittently fail) identified and handled?
-- What happens when performance tests run on underpowered hardware and fail timing thresholds?
-- How are test fixtures and shared test data managed to avoid duplication across test files?
+- **Resolved**: Performance tests skip with environment warning when run on underpowered hardware that cannot meet timing thresholds, preventing false failures while allowing functional tests to run
+- **Resolved**: Test fixtures stored in `./tests/testutil/fixtures/` with helper functions in `./tests/testutil/` for loading and setup, preventing duplication across test files
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: System MUST provide a structured test directory hierarchy with `./tests/unit-tests/`, `./tests/integration-tests/`, `./tests/edge-case-tests/`, and `./tests/performance-tests/` subdirectories
+- **FR-001**: System MUST provide a structured test directory hierarchy with `./tests/unit-tests/`, `./tests/integration-tests/`, `./tests/edge-case-tests/`, `./tests/performance-tests/`, `./tests/testutil/`, and `./tests/testutil/fixtures/` subdirectories
 - **FR-002**: Test files MUST follow the numbering convention `XXX-feature-test` where XXX matches the specification feature number (e.g., 001, 002)
 - **FR-003**: Developers MUST be able to write unit tests that test individual functions and components in isolation
 - **FR-004**: Developers MUST be able to write integration tests that validate database operations (CRUD, transactions, isolation, failure modes)
 - **FR-005**: Developers MUST be able to write edge case tests that validate boundary conditions and error scenarios
 - **FR-006**: Developers MUST be able to write performance tests that measure execution time and validate timing constraints
-- **FR-007**: Test framework MUST support test fixtures and shared test utilities in `./tests/testutil/` for reusable test setup and assertions
+- **FR-006a**: Performance tests for authentication operations MUST verify response time <100ms under normal load to prevent timing analysis attacks
+- **FR-006b**: Performance tests MUST skip with environment warning (using `t.Skip()`) when run on underpowered hardware that cannot meet timing thresholds, preventing false failures
+- **FR-007**: Test framework MUST support test fixtures stored in `./tests/testutil/fixtures/` (data files like CSV, JSON) and shared test utilities in `./tests/testutil/` (helper functions for loading fixtures, common assertions, setup/teardown logic)
 - **FR-008**: Integration tests MUST use isolated test databases or transactions that rollback after each test
+- **FR-008a**: Integration tests MUST skip (using `t.Skip()`) with clear diagnostic message when database connection is unavailable, allowing unit tests to run independently
 - **FR-009**: All tests MUST clean up resources (files, database records, connections) after execution
+- **FR-009a**: When cleanup operations fail (e.g., transaction rollback failure), tests MUST log warning but preserve the actual test result (pass/fail) since transaction rollback already manages cleanup state
 - **FR-010**: Test execution MUST provide clear pass/fail indicators and diagnostic output for failures
 - **FR-011**: Test suite MUST support running all tests together or running specific test categories independently
 - **FR-012**: Security-critical code (authentication, validation, rate limiting) MUST have dedicated test coverage

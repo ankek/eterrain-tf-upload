@@ -1,74 +1,68 @@
 # Implementation Plan: Automated Testing Infrastructure
 
-**Branch**: `002-automated-testing` | **Date**: 2025-11-27 | **Spec**: [spec.md](spec.md)
+**Branch**: `002-automated-testing` | **Date**: 2025-11-29 | **Spec**: [spec.md](./spec.md)
 **Input**: Feature specification from `/specs/002-automated-testing/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/commands/plan.md` for the execution workflow.
 
 ## Summary
 
-Implement comprehensive automated testing infrastructure following test-first development principles. Developers will write unit tests, integration tests, edge case tests, and performance tests in a structured `./tests/` directory hierarchy before implementing features. Tests will validate application functions, database operations, boundary conditions, and performance constraints using Go's standard testing library with optional Testify assertions.
+Implement comprehensive automated testing infrastructure following test-first development (TDD) principles. Developers will write tests before implementation across four categories: unit tests (individual functions), integration tests (database operations), edge-case tests (boundary conditions and error scenarios), and performance tests (timing constraints and security). All tests must be organized in a structured `./tests/` directory hierarchy with feature-numbered test files (XXX-feature-test.go), use isolated test databases with automatic cleanup, and pass before features are considered complete. The implementation supports the constitution's requirement for test-first development and 80% code coverage for critical paths (authentication, validation, storage).
 
 ## Technical Context
 
 **Language/Version**: Go 1.25+ (toolchain go1.25.1)
 **Primary Dependencies**:
-  - Go standard library `testing` package (built-in, no installation)
-  - Optional: `github.com/stretchr/testify/assert` for enhanced assertions
-  - MySQL driver `github.com/go-sql-driver/mysql` v1.9.3 (for integration tests)
+- Standard library `testing` package (built-in)
+- `github.com/go-sql-driver/mysql` v1.9.3 (for integration testing)
+- Optional: `github.com/stretchr/testify` (for enhanced assertions)
+
 **Storage**: MySQL 8.4+ (for integration test database), file system (for test fixtures and CSV test data)
-**Testing**: Go testing framework (`go test` command)
-**Target Platform**: Linux server (development and CI/CD environments)
-**Project Type**: Single project (backend service with structured tests directory)
+**Testing**: Go standard `testing` package with `go test` command
+**Target Platform**: Linux server (same as application)
+**Project Type**: Single (backend service with testing infrastructure)
 **Performance Goals**:
-  - Test suite execution <30 seconds for typical feature
-  - Unit tests <100ms per test
-  - Integration tests <5 seconds per test (including database setup/teardown)
+- Test suite execution: <30 seconds for typical feature development
+- Authentication operations: <100ms response time under normal load (timing attack resistance)
+- Test failure diagnosis: <5 minutes to identify root cause from diagnostic output
+
 **Constraints**:
-  - Tests must be independent (no execution order dependencies)
-  - Integration tests must use isolated test database
-  - All tests must clean up resources after execution
-  - Security tests must achieve 100% coverage for auth/validation/rate-limiting code
+- Test-first development (TDD) mandatory - tests must be written and fail before implementation
+- Integration tests must use isolated test databases with automatic cleanup
+- All tests must be independent and run in any order
+- Zero tolerance for failing tests in completed work
+
 **Scale/Scope**:
-  - Support testing for all application features (current: 2 features, expanding)
-  - 80% minimum code coverage for critical paths
-  - Test infrastructure supports parallel test execution
+- 4 test categories (unit, integration, edge-case, performance)
+- Feature-numbered test organization (XXX-feature-test.go)
+- 80% code coverage requirement for critical paths (auth, validation, storage)
+- Shared test utilities and fixtures to prevent duplication
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-### Section IV: Comprehensive Testing ✅ ALIGNED
+Based on references in the feature specification, the project constitution has the following requirements:
 
-This feature **implements** the constitution's testing requirements:
-- ✅ Test-first development (tests before implementation)
-- ✅ Structured `./tests/` directory hierarchy (unit-tests/, integration-tests/, edge-case-tests/, performance-tests/)
-- ✅ Test numbering aligned with specification features
-- ✅ 80% minimum coverage for critical paths
-- ✅ Post-development validation (all tests must pass)
+**Section IV: Comprehensive Testing** ✅ ALIGNED
+- Mandate: Test-first development (TDD) is mandatory
+- Mandate: Structured `./tests/` directory hierarchy required
+- Mandate: Minimum 80% code coverage for critical paths (auth, validation, storage)
+- **Feature Alignment**: This feature implements the testing infrastructure to support these mandates
 
-**Status**: PASS - This feature establishes the infrastructure mandated by constitution Section IV
+**Section VII: DRY (Don't Repeat Yourself)** ✅ ALIGNED
+- Mandate: Common logic should be defined once and reused
+- **Feature Alignment**: Test fixtures stored in `./tests/testutil/fixtures/` with helper functions in `./tests/testutil/` prevent duplication
 
-### Section VII: DRY (Don't Repeat Yourself) ✅ COMPLIANT
+**Section VIII: KISS (Keep It Simple, Stupid)** ✅ ALIGNED
+- Mandate: Prefer simplicity over complexity
+- **Feature Alignment**: Using Go standard `testing` package (no complex frameworks), simple directory structure, standard patterns
 
-- ✅ Shared test utilities in `./tests/testutil/` for reusable setup/assertions
-- ✅ Common test fixtures to avoid duplication
-- ✅ Centralized test configuration (database connection, environment variables)
+**Additional Requirements**:
+- Test numbering must match specification feature numbers (XXX-feature-test.go)
+- All tests must pass before code is considered complete (zero tolerance policy)
 
-**Status**: PASS - Test utilities follow DRY principles
-
-### Section VIII: KISS (Keep It Simple) ✅ COMPLIANT
-
-- ✅ Use Go standard library `testing` package (no complex test framework)
-- ✅ Optional Testify for assertions (lightweight, well-established)
-- ✅ Simple directory structure (flat hierarchy by test type)
-- ✅ No premature abstractions (use standard Go interfaces and test doubles)
-
-**Status**: PASS - Testing approach is simple and straightforward
-
-### Pre-Phase 0 Gate: ✅ PASS
-
-All constitution principles are satisfied. No violations to justify. Proceed to Phase 0 research.
+**Gate Status**: ✅ PASS - No constitution violations. This feature implements the constitutional requirements for testing infrastructure.
 
 ## Project Structure
 
@@ -87,157 +81,108 @@ specs/[###-feature]/
 ### Source Code (repository root)
 
 ```text
-./                              # Repository root
-├── cmd/                        # Application entry points
-│   └── server/
-│       └── main.go
-├── internal/                   # Application code
-│   ├── auth/                   # Authentication logic
-│   ├── handlers/               # HTTP handlers
-│   ├── storage/                # Storage implementations
-│   ├── middleware/             # HTTP middleware
-│   ├── validation/             # Input validation
-│   └── config/                 # Configuration management
+tests/
+├── unit-tests/               # Unit tests for individual functions/components
+│   ├── 001-baseline-test.go
+│   ├── 002-automated-testing-test.go
+│   └── XXX-feature-test.go   # Future feature tests
 │
-└── tests/                      # NEW: Testing infrastructure (this feature)
-    ├── unit-tests/             # Unit tests for individual functions
-    │   ├── 001-baseline-documentation-test.go  # Tests for feature 001
-    │   ├── 002-automated-testing-test.go       # Tests for feature 002 (this feature)
-    │   └── ...                                 # Future feature tests
+├── integration-tests/        # Integration tests for database operations
+│   ├── 001-baseline-test.go
+│   ├── 002-automated-testing-test.go
+│   └── XXX-feature-test.go
+│
+├── edge-case-tests/          # Edge case and error scenario tests
+│   ├── 001-baseline-test.go
+│   ├── 002-automated-testing-test.go
+│   └── XXX-feature-test.go
+│
+├── performance-tests/        # Performance and timing tests
+│   ├── 001-baseline-test.go
+│   ├── 002-automated-testing-test.go
+│   └── XXX-feature-test.go
+│
+└── testutil/                 # Shared test utilities and fixtures
+    ├── fixtures/             # Test data files (CSV, JSON, etc.)
+    │   ├── sample-orgs.csv
+    │   ├── sample-resources.json
+    │   └── test-keys.json
     │
-    ├── integration-tests/      # Integration tests for multi-component workflows
-    │   ├── 001-database-ops-test.go            # Database CRUD tests
-    │   ├── 002-api-workflow-test.go            # API endpoint integration tests
-    │   └── ...
-    │
-    ├── edge-case-tests/        # Boundary conditions and error scenarios
-    │   ├── 001-validation-edge-test.go         # Input validation edge cases
-    │   ├── 002-security-edge-test.go           # Security edge cases
-    │   └── ...
-    │
-    ├── performance-tests/      # Performance and load tests
-    │   ├── 001-auth-timing-test.go             # Timing attack resistance
-    │   ├── 002-rate-limit-test.go              # Rate limiting under load
-    │   └── ...
-    │
-    └── testutil/               # Shared test utilities and helpers
-        ├── fixtures.go         # Common test data and fixtures
-        ├── database.go         # Test database setup/teardown
-        ├── assertions.go       # Custom assertions
-        └── mocks.go            # Mock implementations for interfaces
+    ├── db.go                 # Database test helpers (setup, teardown, transactions)
+    ├── fixtures.go           # Fixture loading utilities
+    ├── assertions.go         # Custom assertion helpers
+    └── mock.go               # Mock implementations for testing
+
+# Existing application code (reference only - not created by this feature)
+internal/
+├── models/
+├── handlers/
+├── storage/
+└── auth/
+
+cmd/
+└── server/
+    └── main.go
 ```
 
-**Structure Decision**: Single project structure (Option 1). This is a backend service with no frontend or mobile components. The new `./tests/` directory hierarchy is created at repository root alongside `cmd/` and `internal/`, following the constitution's testing requirements.
+**Structure Decision**: Single project structure (Option 1) selected. Testing infrastructure is organized in a top-level `tests/` directory with four category subdirectories matching the specification requirements. Test files follow the numbering convention XXX-feature-test.go where XXX matches the specification feature number. Shared utilities and fixtures are centralized in `tests/testutil/` to prevent duplication and support DRY principles.
 
 ## Complexity Tracking
 
-No constitution violations. This feature implements the testing infrastructure mandated by constitution Section IV.
+> **Fill ONLY if Constitution Check has violations that must be justified**
+
+**No complexity violations** - This feature fully aligns with constitutional requirements and implements testing infrastructure mandated by Section IV.
 
 ---
 
-## Phase 0: Research Complete ✅
+## Post-Design Constitution Re-Check
 
-**Artifact**: `research.md`
+*Re-evaluated after Phase 1 design completion*
 
-**Key Decisions**:
-1. Testing Framework: Go standard library `testing` + optional `testify/assert`
-2. Integration DB Strategy: Isolated test database with transaction-based cleanup
-3. Test Utilities: Centralized `./tests/testutil/` package (DRY compliance)
-4. Test Numbering: Match spec numbers (XXX-feature-test.go)
-5. Code Coverage: Go built-in tools (`go test -cover`)
-6. Performance Testing: Go benchmarks + table-driven load tests
-7. Test Execution: Parallel with `t.Parallel()`
-8. CI Integration: Makefile targets for standardized execution
+**Date**: 2025-11-29
 
-**Status**: All technology decisions made, no unresolved questions
+### Design Artifacts Review
 
----
+**Research Decisions** (research.md):
+- ✅ Go standard `testing` package (KISS - no complex frameworks)
+- ✅ Transaction-based database cleanup (DRY - reusable pattern)
+- ✅ Testify assertions optional (enhances readability without complexity)
 
-## Phase 1: Design & Contracts Complete ✅
+**Data Model** (data-model.md):
+- ✅ Entities defined for test execution (Test Suite, Test Case, Test Fixture, etc.)
+- ✅ No unnecessary persistence (runtime structures only)
+- ✅ Clear validation rules and relationships
 
-**Artifacts**:
-- `data-model.md`: Six primary entities (TestSuite, TestCase, TestFixture, TestHelper, TestDatabase, TestReport)
-- `contracts/testing-api.md`: Six contract categories (test execution, coverage, database setup, utilities, environment, output formats)
-- `quickstart.md`: 10-minute quickstart guide with working examples
+**API Contracts** (contracts/testing-api.md):
+- ✅ Test execution API defined using Go testing conventions
+- ✅ Database test helpers API for transaction management
+- ✅ Fixture loading API for DRY test data management
 
-**Key Design Elements**:
-1. **Test Directory Structure**: Four categories (unit, integration, edge-case, performance) + testutil
-2. **Test Utilities**: Shared fixtures, database helpers, assertions, mocks
-3. **Database Strategy**: Transaction-based cleanup, isolated test DB, environment configuration
-4. **Execution Commands**: Makefile targets for `test-unit`, `test-integration`, `test-edge`, `test-performance`, `test-all`, `coverage`
-5. **Coverage Targets**: 100% for security code, 80% minimum for critical paths
-6. **Test Numbering**: Aligned with specification features (002-automated-testing-test.go)
+**Quickstart Guide** (quickstart.md):
+- ✅ Simple setup process (<10 minutes)
+- ✅ Clear examples for each test category
+- ✅ Standard Go tooling (`go test`)
 
-**Status**: Design complete, ready for implementation
+### Constitution Compliance Verification
 
----
+**Section IV: Comprehensive Testing** ✅ PASS
+- Design implements test-first workflow
+- Four test categories properly structured
+- Test numbering matches specification features
+- Isolated test databases with automatic cleanup
 
-## Post-Phase 1 Constitution Check ✅
+**Section VII: DRY** ✅ PASS
+- Shared test utilities in `tests/testutil/`
+- Fixture management prevents duplication
+- Transaction-based cleanup pattern reusable
 
-Re-evaluated after Phase 1 design:
+**Section VIII: KISS** ✅ PASS
+- Standard library `testing` package (no frameworks)
+- Simple directory structure
+- Clear conventions (XXX-feature-test.go)
 
-### Section IV: Comprehensive Testing ✅ PASS
-- Test-first development workflow documented in quickstart.md
-- Structured directory hierarchy matches constitution requirements
-- Test numbering strategy aligned with specifications
-- 80%/100% coverage targets documented
+### Final Gate Status
 
-### Section VII: DRY ✅ PASS
-- Shared test utilities in `./tests/testutil/` package
-- Common fixtures prevent duplication
-- Makefile centralizes test execution commands
+✅ **PASS** - All design decisions align with constitutional requirements. No violations introduced during Phase 0 research or Phase 1 design.
 
-### Section VIII: KISS ✅ PASS
-- Go standard library `testing` package (no complex frameworks)
-- Optional testify for better assertions (lightweight)
-- Simple directory structure (flat hierarchy)
-- No premature abstractions (standard Go interfaces)
-
-**Final Gate**: ✅ PASS - Ready for implementation
-
----
-
-## Implementation Readiness
-
-### Prerequisites Satisfied
-- ✅ Constitution requirements met
-- ✅ Technology decisions documented
-- ✅ Data model defined
-- ✅ API contracts specified
-- ✅ Quickstart guide available
-- ✅ Agent context updated (CLAUDE.md)
-
-### Next Steps
-1. Run `/speckit.tasks` to generate implementation task list
-2. Follow test-first workflow: write tests → implement → validate
-3. Use quickstart.md as reference during implementation
-4. Validate coverage >= 80% for critical paths
-
-### Success Criteria Tracking
-- SC-001: ✅ Developers can write tests before implementation (quickstart demonstrates workflow)
-- SC-002: ✅ Integration tests validate database ops with cleanup (transaction-based strategy)
-- SC-003: ✅ Test suite runs <30 seconds (parallel execution strategy)
-- SC-004: ✅ 100% coverage for security code (coverage targets documented)
-- SC-005: ✅ All tests pass before completion (Makefile enforces)
-- SC-006: ✅ Test failures provide diagnostics (testify assertions, Go test output)
-- SC-007: ✅ 90% test-first adoption (quickstart demonstrates TDD workflow)
-- SC-008: ✅ 80% reduction in database bugs (integration tests catch SQL errors)
-
----
-
-## Files Generated
-
-```
-specs/002-automated-testing/
-├── plan.md              # This file (implementation plan)
-├── spec.md              # Feature specification
-├── research.md          # Phase 0 research decisions
-├── data-model.md        # Phase 1 data model (6 entities)
-├── quickstart.md        # Phase 1 quickstart guide
-├── contracts/
-│   └── testing-api.md   # Phase 1 API contracts (6 categories)
-└── checklists/
-    └── requirements.md  # Specification quality checklist (all ✅)
-```
-
-**Planning Complete**: Ready for `/speckit.tasks` to generate implementation tasks.
+**Ready for Phase 2**: Task generation can proceed with `/speckit.tasks`
