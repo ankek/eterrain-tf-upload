@@ -58,10 +58,25 @@ test-performance: ## Run performance and load tests (takes longer)
 test-edge-cases: ## Run edge case and error handling tests
 	$(GOTEST) -v -timeout 5m ./internal/auth -run "^TestEdgeCase"
 
-test-coverage: ## Run tests with coverage report
-	$(GOTEST) -v -timeout $(TEST_TIMEOUT) -coverprofile=$(TEST_COVERAGE_FILE) -covermode=atomic ./...
+coverage: ## Generate coverage report for critical paths (auth, validation, storage)
+	@echo "Generating coverage report for critical paths..."
+	$(GOTEST) -v -timeout $(TEST_TIMEOUT) \
+		-coverprofile=$(TEST_COVERAGE_FILE) \
+		-covermode=atomic \
+		./internal/auth/... \
+		./internal/validation/... \
+		./internal/storage/... \
+		./tests/unit-tests/... \
+		./tests/integration-tests/...
 	$(GOCMD) tool cover -html=$(TEST_COVERAGE_FILE) -o $(TEST_COVERAGE_HTML)
 	@echo "Coverage report generated: $(TEST_COVERAGE_HTML)"
+	@echo ""
+	@echo "Coverage summary for critical paths:"
+	$(GOCMD) tool cover -func=$(TEST_COVERAGE_FILE) | grep -E "auth|validation|storage|total"
+	@echo ""
+	@echo "Constitution requirement: >= 80% coverage for critical paths (auth, validation, storage)"
+
+test-coverage: coverage ## Alias for coverage target (backward compatibility)
 
 test-coverage-summary: ## Run tests and show coverage summary
 	$(GOTEST) -timeout $(TEST_TIMEOUT) -coverprofile=$(TEST_COVERAGE_FILE) -covermode=atomic ./...
@@ -79,7 +94,17 @@ test-bench-auth: ## Run only auth benchmarks
 test-bench-keygen: ## Run only keygen benchmarks
 	$(GOTEST) -bench=. -benchmem -timeout 5m ./cmd/keygen/...
 
-test-all: test-short test-integration test-edge-cases ## Run comprehensive test suite (unit + integration + edge cases)
+test-all: ## Run all test categories (unit, integration, edge-case, performance) from tests/ directory
+	@echo "Running all test categories..."
+	@echo "1/4: Running unit tests..."
+	$(GOTEST) -v -timeout 5m ./tests/unit-tests/...
+	@echo "2/4: Running integration tests..."
+	$(GOTEST) -v -timeout 10m ./tests/integration-tests/...
+	@echo "3/4: Running edge case tests..."
+	$(GOTEST) -v -timeout 5m ./tests/edge-case-tests/...
+	@echo "4/4: Running performance tests..."
+	$(GOTEST) -v -timeout 15m -bench=. ./tests/performance-tests/...
+	@echo "All test categories completed successfully!"
 
 test-ci: ## Run tests suitable for CI environment
 	$(GOTEST) -v -race -timeout $(TEST_TIMEOUT) -coverprofile=$(TEST_COVERAGE_FILE) -covermode=atomic ./...
