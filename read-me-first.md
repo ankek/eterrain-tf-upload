@@ -39,7 +39,7 @@ The CMP consists of the following components:
    - **Status**: MVP Developed. 
 
 4. **Upload service**
-   - **Source Code Location**: `eterrain-tf-upload` directory
+   - **Source Code Location**: `eterrain-tf-upload` directory. This repo.
    - **Purpose**: Data upload inferface of Carbon Management Platform (CMP) for processing uploaded data to be stored in MySQL Organization DB.
    - **Target Users**: Global admininstartor and apllication owners
    - **Description**: Backend service used for uploading Terrafom configurations of Organizations in theis MySQL DB. Part of Organization IaC and provide fully automated workflow to track their cloud resources
